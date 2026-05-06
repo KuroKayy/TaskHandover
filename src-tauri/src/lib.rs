@@ -1,6 +1,7 @@
 mod window;
 mod backup;
 
+use tauri::Manager;
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -20,9 +21,8 @@ pub fn run() {
                 .add_migrations("sqlite:tasks.db", migrations)
                 .build()
         )
-        .plugin(tauri_plugin_tray_icon::init())
         .setup(|app| {
-            let main_window = tauri::Manager::get_webview_window(app, "main").unwrap();
+            let main_window = app.get_webview_window("main").unwrap();
             window::set_no_activate(&main_window)?;
             backup::schedule_daily_backup(app.handle().clone());
             Ok(())

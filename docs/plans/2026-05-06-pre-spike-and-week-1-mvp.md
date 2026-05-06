@@ -320,14 +320,15 @@ bun add -d vitest jsdom @types/node
 In `src-tauri/Cargo.toml`, under `[dependencies]`:
 
 ```toml
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
-tauri-plugin-tray-icon = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 chrono = { version = "0.4", features = ["serde"] }
 ```
+
+**Note**: tray-icon support in Tauri 2.x is a feature of the core `tauri` crate (use `TrayIconBuilder` API in setup), not a separate `tauri-plugin-tray-icon` crate. The latter does not exist on crates.io.
 
 - [ ] **Step 1.3: Register plugins in lib.rs**
 
@@ -337,6 +338,7 @@ Create `src-tauri/src/lib.rs`:
 mod window;
 mod backup;
 
+use tauri::Manager;
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -356,9 +358,8 @@ pub fn run() {
                 .add_migrations("sqlite:tasks.db", migrations)
                 .build()
         )
-        .plugin(tauri_plugin_tray_icon::init())
         .setup(|app| {
-            let main_window = tauri::Manager::get_webview_window(app, "main").unwrap();
+            let main_window = app.get_webview_window("main").unwrap();
             window::set_no_activate(&main_window)?;
             backup::schedule_daily_backup(app.handle().clone());
             Ok(())
@@ -367,6 +368,8 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 ```
+
+**Note**: tray icon creation (Pre-Spike #5) uses `TrayIconBuilder` from `tauri::tray` directly in this setup closure when implemented. Not a `.plugin()` call.
 
 Update `src-tauri/src/main.rs` to a single line:
 
@@ -411,23 +414,38 @@ Add to `package.json` scripts:
 }
 ```
 
+- [ ] **Step 1.4.5: Create placeholder migration file (so Rust compiles)**
+
+`src-tauri/src/lib.rs` references `migrations/001_initial.sql` via `include_str!`. Without the file, Rust won't compile. Create a placeholder now; Task 2 fills it with real schema.
+
+Create `src-tauri/migrations/001_initial.sql`:
+
+```sql
+-- Placeholder; real schema lands in Task 2.
+SELECT 1;
+```
+
+(The `SELECT 1;` is harmless — it makes the file valid SQL so include_str! succeeds. Task 2 replaces this with the real CREATE TABLE statements.)
+
 - [ ] **Step 1.5: Commit dependencies**
 
 ```bash
-git add package.json bun.lockb src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/src/lib.rs src-tauri/src/main.rs vitest.config.ts src/test-setup.ts
-git commit -m "feat(deps): add zustand, framer-motion, lexorank, vitest, plugin-sql, tray-icon"
+git add package.json bun.lock src-tauri/Cargo.toml src-tauri/src/lib.rs src-tauri/src/main.rs src-tauri/src/window.rs src-tauri/src/backup.rs src-tauri/migrations/001_initial.sql vitest.config.ts src/test-setup.ts
+git commit -m "feat(deps): add zustand, framer-motion, lexorank, vitest, plugin-sql"
 ```
+
+(Note: `bun.lock` is text format on bun 1.3+; legacy `bun.lockb` no longer used. `Cargo.lock` is generated on first `cargo build` — will be committed when user runs Pre-Spike on Windows.)
 
 ---
 
 ## Task 2: SQLite schema (migration file)
 
 **Files:**
-- Create: `src-tauri/migrations/001_initial.sql`
+- Modify: `src-tauri/migrations/001_initial.sql` (placeholder created in Task 1.4.5; replace with real schema here)
 
 - [ ] **Step 2.1: Write the migration SQL**
 
-Create `src-tauri/migrations/001_initial.sql`:
+Replace contents of `src-tauri/migrations/001_initial.sql` with:
 
 ```sql
 CREATE TABLE tasks (
