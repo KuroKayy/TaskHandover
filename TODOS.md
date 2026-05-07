@@ -105,3 +105,25 @@
 - 访谈不要在 widget 上跑——开个真实对话，最好咖啡时间
 
 **Depends on**：Week 1 至少有 5 天连续试用数据。
+
+---
+
+## 5. Task 6 (useTasks/db.ts) 必须显式开启 SQLite Foreign Keys
+
+**What**：在 `src/lib/db.ts` 的 getDb() 实现里，每次拿到 Database 实例后立刻 `db.execute('PRAGMA foreign_keys = ON;')`。否则 task_events 表的 ON DELETE CASCADE 不生效。
+
+**Why**：SQLite 的外键约束**默认每个连接关闭**——这是 SQLite 的历史包袱（与 ANSI SQL 不一致）。tauri-plugin-sql 不会自动开启。Task 2 验证时用 sqlite3 CLI 测试 ON DELETE CASCADE 工作，但那是因为 sqlite3 CLI 默认开启 FK；通过 plugin-sql 跨进程连接时不开。
+
+**Pros**：
+- 一行代码（`PRAGMA foreign_keys = ON;`）
+- 让 schema 设计的 FK 真的生效（不是装饰性）
+
+**Cons**：
+- 无
+
+**Context**：
+- Task 2 implementer 在 sqlite3 CLI 验证时用 `PRAGMA foreign_keys=ON;` 主动开启，证实 cascade 起作用
+- Task 6 的 db.ts 模板必须有这一行：在 `Database.load(...)` 之后立刻 `await db.execute('PRAGMA foreign_keys = ON;')`
+- 写 Task 6 测试时也要测一条 cascade 路径（删除 tasks 行 → 对应 task_events 行被清理）
+
+**Depends on**：Task 6 (useTasks 实现) 时同步处理。
