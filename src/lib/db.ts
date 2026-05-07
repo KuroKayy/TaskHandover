@@ -1,7 +1,7 @@
 import Database from '@tauri-apps/plugin-sql';
 import { TaskSchema, type Task, TaskEventSchema, type TaskEvent } from '../types';
 
-let dbInstance: Database | null = null;
+let dbPromise: Promise<Database> | null = null;
 
 /**
  * Returns a memoized Database connection.
@@ -15,14 +15,27 @@ let dbInstance: Database | null = null;
  * We issue `PRAGMA foreign_keys = ON;` here, in the single source of truth for
  * connection setup, so every consumer that goes through `getDb()` is safe.
  * See TODOS.md item #5 for full context.
+ *
+ * Memoizes the *promise* (not the resolved value) so concurrent first-callers
+ * don't double-initialize and leak a SQLite handle.
  */
-export async function getDb(): Promise<Database> {
-  if (!dbInstance) {
-    const db = await Database.load('sqlite:tasks.db');
-    await db.execute('PRAGMA foreign_keys = ON;');
-    dbInstance = db;
+export function getDb(): Promise<Database> {
+  if (!dbPromise) {
+    dbPromise = (async () => {
+      const db = await Database.load('sqlite:tasks.db');
+      await db.execute('PRAGMA foreign_keys = ON;');
+      return db;
+    })();
   }
-  return dbInstance;
+  return dbPromise;
+}
+
+/**
+ * Test-only: clears the memoized connection so each test gets a fresh one.
+ * NEVER call from production code.
+ */
+export function __resetDbForTesting(): void {
+  dbPromise = null;
 }
 
 type DbTaskRow = {
