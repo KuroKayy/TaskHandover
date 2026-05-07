@@ -1,14 +1,18 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useTasks } from '../hooks/useTasks';
 import { useStore } from '../store/useStore';
 import { TaskItem } from './TaskItem';
 import { AddTaskInput } from './AddTaskInput';
+import { CompletionAnimation } from './CompletionAnimation';
+import { useAudio } from '../hooks/useAudio';
 
 export function TaskWidget() {
   const { tasks, loadTasks, addTask, persistStartTask, persistFinishTask } = useTasks();
   const startTask = useStore((s) => s.startTask);
   const finishTask = useStore((s) => s.finishTask);
   const undo = useStore((s) => s.undo);
+  const [celebrating, setCelebrating] = useState(false);
+  const { playComplete } = useAudio();
 
   useEffect(() => { void loadTasks(); }, [loadTasks]);
 
@@ -17,7 +21,8 @@ export function TaskWidget() {
   const done = tasks.filter(t => t.status === 'done');
 
   return (
-    <div className="bg-black/80 backdrop-blur-md rounded-xl p-4 h-screen w-screen flex flex-col gap-3">
+    <div className="bg-black/80 backdrop-blur-md rounded-xl p-4 h-screen w-screen flex flex-col gap-3 relative">
+      <CompletionAnimation show={celebrating} onDone={() => setCelebrating(false)} />
       <header className="flex justify-between items-center">
         <h1 className="text-lg font-semibold text-white">今日任务</h1>
         <button
@@ -44,7 +49,12 @@ export function TaskWidget() {
                 key={t.id}
                 task={t}
                 onStart={() => { startTask(t.id); void persistStartTask(t.id); }}
-                onFinish={() => { finishTask(t.id); void persistFinishTask(t.id); }}
+                onFinish={() => {
+                  finishTask(t.id);
+                  void persistFinishTask(t.id);
+                  playComplete();
+                  setCelebrating(true);
+                }}
               />
             ))}
           </section>
