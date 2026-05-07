@@ -69,7 +69,10 @@ https://github.com/signup
 3. 填表：
    - **Note**：写 `TaskHandover push` 之类的备注，自己看的
    - **Expiration**：选 **"No expiration"**（永不过期，省事；如果你介意安全可以选 90 天）
-   - **Scopes**：**勾选第一项 `repo`**（这一项下面所有子项会自动全勾上）。其他的都不要勾。
+   - **Scopes**：**必须勾 2 个**：
+     - ☑️ **`repo`**（第一个大项，子项会自动全勾上）
+     - ☑️ **`workflow`**（在 `repo` 下面几行，独立大项——**不勾这个会被 GitHub 拒绝推送 `.github/workflows/*` 文件**）
+   - 其他都不要勾。
 
 4. 拉到最下面，点 **"Generate token"** 绿色按钮。
 
