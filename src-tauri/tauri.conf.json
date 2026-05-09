@@ -13,17 +13,17 @@
     "windows": [
       {
         "label": "main",
-        "title": "TaskHandover (debug build)",
+        "title": "TaskHandover",
         "width": 350,
         "height": 600,
         "x": 100,
-        "y": 100,
-        "decorations": true,
-        "transparent": false,
-        "alwaysOnTop": false,
+        "y": 40,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
         "skipTaskbar": false,
         "focus": true,
-        "resizable": true
+        "resizable": false
       }
     ],
     "security": {
