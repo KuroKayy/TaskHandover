@@ -13,17 +13,17 @@
     "windows": [
       {
         "label": "main",
-        "title": "TaskHandover",
-        "width": 350,
-        "height": 600,
+        "title": "TaskHandover 诊断版",
+        "width": 380,
+        "height": 620,
         "x": 100,
-        "y": 40,
-        "decorations": false,
-        "transparent": true,
+        "y": 100,
+        "decorations": true,
+        "transparent": false,
         "alwaysOnTop": true,
         "skipTaskbar": false,
         "focus": true,
-        "resizable": false
+        "resizable": true
       }
     ],
     "security": {
