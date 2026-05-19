@@ -1,9 +1,11 @@
 name: Build Windows MSI
 
+# The Windows .msi build is deferred while we iterate on the web version.
+# It no longer runs on every push to main — only on demand (workflow_dispatch)
+# or when a release tag is pushed. This keeps the Actions tab focused on the
+# web deploy. Re-enable the push trigger when we return to the desktop wrap.
 on:
   push:
-    branches:
-      - main
     tags:
       - "v*"
   workflow_dispatch: {}

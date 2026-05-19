@@ -79,7 +79,7 @@ https://github.com/signup
 5. **关键**：页面会显示一串字符，长这样：
 
    ```
-   ghp_AbCdEfGhIjKlMnOpQrStUvWxYz1234567890
+   ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
    ```
 
    **立刻复制下来贴到一个文本文件里保存好！这串字符只显示一次，关了页面就再也看不到了。**
