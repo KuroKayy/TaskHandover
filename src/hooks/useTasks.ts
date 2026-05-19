@@ -1,12 +1,17 @@
 import { useState, useCallback } from 'react';
-import { getDb, rowToTask } from '../lib/db';
+import { getDb } from '../lib/db';
 import { useStore } from '../store/useStore';
 import { initialOrder, afterAll } from '../lib/lexorank';
+import { TaskSchema, type Task } from '../types';
 
 function uuid(): string {
   return crypto.randomUUID();
 }
 
+/**
+ * The single storage entry point. Components never touch IndexedDB directly —
+ * they go through this hook. (CLAUDE.md: useTasks is the sole storage boundary.)
+ */
 export function useTasks() {
   const tasks = useStore((s) => s.tasks);
   const setTasks = useStore((s) => s.setTasks);
@@ -15,15 +20,18 @@ export function useTasks() {
   const loadTasks = useCallback(async () => {
     try {
       const db = await getDb();
-      const rows = await db.select<any[]>(
-        'SELECT * FROM tasks WHERE status IN (?, ?, ?) ORDER BY sort_order',
-        ['queued', 'in_progress', 'done'],
-      );
-      setTasks(rows.map(rowToTask));
+      const all = await db.getAll('tasks');
+      const visible = all
+        .filter((t) => TaskSchema.safeParse(t).success)
+        .filter((t) => t.status !== 'cancelled')
+        .sort((a, b) =>
+          a.sortOrder < b.sortOrder ? -1 : a.sortOrder > b.sortOrder ? 1 : 0,
+        );
+      setTasks(visible);
     } catch (e) {
       const msg = String(e);
       setError(msg);
-      writeErrorEvent(msg);
+      console.error('[useTasks] loadTasks failed:', msg);
     }
   }, [setTasks]);
 
@@ -33,10 +41,17 @@ export function useTasks() {
       const db = await getDb();
       const lastSort = tasks.length > 0 ? tasks[tasks.length - 1].sortOrder : null;
       const sortOrder = lastSort ? afterAll(lastSort) : initialOrder();
-      await db.execute(
-        'INSERT INTO tasks (id, title, status, created_at, sort_order) VALUES (?, ?, ?, ?, ?)',
-        [uuid(), title.trim(), 'queued', Date.now(), sortOrder],
-      );
+      const task: Task = {
+        id: uuid(),
+        title: title.trim(),
+        status: 'queued',
+        createdAt: Date.now(),
+        startedAt: null,
+        finishedAt: null,
+        sortOrder,
+        note: null,
+      };
+      await db.put('tasks', task);
       await loadTasks();
     },
     [tasks, loadTasks],
@@ -44,45 +59,31 @@ export function useTasks() {
 
   const persistStartTask = useCallback(async (id: string) => {
     const db = await getDb();
+    const task = await db.get('tasks', id);
+    if (!task) return;
     const now = Date.now();
-    await db.execute(
-      'UPDATE tasks SET status = ?, started_at = ? WHERE id = ?',
-      ['in_progress', now, id],
-    );
-    await db.execute(
-      'INSERT INTO task_events (id, task_id, event_type, timestamp) VALUES (?, ?, ?, ?)',
-      [uuid(), id, 'started', now],
-    );
+    await db.put('tasks', { ...task, status: 'in_progress', startedAt: now });
+    await db.put('task_events', {
+      id: uuid(),
+      taskId: id,
+      eventType: 'started',
+      timestamp: now,
+    });
   }, []);
 
   const persistFinishTask = useCallback(async (id: string) => {
     const db = await getDb();
+    const task = await db.get('tasks', id);
+    if (!task) return;
     const now = Date.now();
-    await db.execute(
-      'UPDATE tasks SET status = ?, finished_at = ? WHERE id = ?',
-      ['done', now, id],
-    );
-    await db.execute(
-      'INSERT INTO task_events (id, task_id, event_type, timestamp) VALUES (?, ?, ?, ?)',
-      [uuid(), id, 'finished', now],
-    );
+    await db.put('tasks', { ...task, status: 'done', finishedAt: now });
+    await db.put('task_events', {
+      id: uuid(),
+      taskId: id,
+      eventType: 'finished',
+      timestamp: now,
+    });
   }, []);
 
   return { tasks, error, loadTasks, addTask, persistStartTask, persistFinishTask };
-}
-
-/**
- * Logs system-level DB errors that aren't tied to a specific task.
- *
- * Originally the spec proposed inserting a row in task_events with a null-UUID
- * sentinel for task_id. That can't work: task_events.task_id has a NOT NULL +
- * FK constraint to tasks(id), and Task 3 enabled `PRAGMA foreign_keys = ON`,
- * so the INSERT would be rejected at runtime — and then THAT failure would
- * recurse here. We log to console instead. Per-task error events are written
- * by call sites that have task context (none yet — addTask/persistStartTask/
- * persistFinishTask currently let exceptions bubble; they're caught at the
- * component layer in a future task).
- */
-function writeErrorEvent(msg: string): void {
-  console.error('[useTasks DB error]', msg);
 }

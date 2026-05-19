@@ -1,79 +1,67 @@
-import Database from '@tauri-apps/plugin-sql';
-import { TaskSchema, type Task, TaskEventSchema, type TaskEvent } from '../types';
-
-let dbPromise: Promise<Database> | null = null;
+import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
+import type { Task, TaskEvent } from '../types';
 
 /**
- * Returns a memoized Database connection.
+ * Local storage layer — IndexedDB (browser-native database).
  *
- * IMPORTANT: SQLite disables foreign-key enforcement per-connection by default
- * (an ANSI-SQL inconsistency baked into SQLite for backward compatibility).
- * tauri-plugin-sql does NOT enable it for us. The schema in
- * `src-tauri/migrations/001_initial.sql` declares `ON DELETE CASCADE` on
- * task_events.task_id — that cascade only runs when foreign_keys is ON.
+ * Why IndexedDB instead of the original SQLite plan: the app is now a web app
+ * first. IndexedDB is built into every browser AND into the Tauri webview, so
+ * the SAME storage code runs in the web version and the future desktop widget
+ * — no second storage layer to maintain.
  *
- * We issue `PRAGMA foreign_keys = ON;` here, in the single source of truth for
- * connection setup, so every consumer that goes through `getDb()` is safe.
- * See TODOS.md item #5 for full context.
- *
- * Memoizes the *promise* (not the resolved value) so concurrent first-callers
- * don't double-initialize and leak a SQLite handle.
+ * Two object stores mirror the original schema:
+ *   tasks        — keyed by Task.id
+ *   task_events  — audit log, keyed by TaskEvent.id, indexed by taskId
  */
-export function getDb(): Promise<Database> {
+
+const DB_NAME = 'taskhandover';
+const DB_VERSION = 1;
+
+interface TaskHandoverSchema extends DBSchema {
+  tasks: {
+    key: string;
+    value: Task;
+  };
+  task_events: {
+    key: string;
+    value: TaskEvent;
+    indexes: { by_task: string };
+  };
+}
+
+export type TaskHandoverDB = IDBPDatabase<TaskHandoverSchema>;
+
+let dbPromise: Promise<TaskHandoverDB> | null = null;
+
+/**
+ * Returns a memoized IndexedDB connection. Memoizes the promise (not the
+ * resolved value) so concurrent first-callers share one open() call.
+ */
+export function getDb(): Promise<TaskHandoverDB> {
   if (!dbPromise) {
-    dbPromise = (async () => {
-      const db = await Database.load('sqlite:tasks.db');
-      await db.execute('PRAGMA foreign_keys = ON;');
-      return db;
-    })();
+    dbPromise = openDB<TaskHandoverSchema>(DB_NAME, DB_VERSION, {
+      upgrade(db) {
+        if (!db.objectStoreNames.contains('tasks')) {
+          db.createObjectStore('tasks', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('task_events')) {
+          const events = db.createObjectStore('task_events', { keyPath: 'id' });
+          events.createIndex('by_task', 'taskId');
+        }
+      },
+    });
   }
   return dbPromise;
 }
 
 /**
- * Test-only: clears the memoized connection so each test gets a fresh one.
- * NEVER call from production code.
+ * Test-only: closes the connection and clears the memo so each test gets a
+ * fresh database. NEVER call from production code.
  */
-export function __resetDbForTesting(): void {
-  dbPromise = null;
-}
-
-type DbTaskRow = {
-  id: string;
-  title: string;
-  status: string;
-  created_at: number;
-  started_at: number | null;
-  finished_at: number | null;
-  sort_order: string;
-  note: string | null;
-};
-
-export function rowToTask(row: DbTaskRow): Task {
-  return TaskSchema.parse({
-    id: row.id,
-    title: row.title,
-    status: row.status,
-    createdAt: row.created_at,
-    startedAt: row.started_at,
-    finishedAt: row.finished_at,
-    sortOrder: row.sort_order,
-    note: row.note,
-  });
-}
-
-type DbEventRow = {
-  id: string;
-  task_id: string;
-  event_type: string;
-  timestamp: number;
-};
-
-export function rowToEvent(row: DbEventRow): TaskEvent {
-  return TaskEventSchema.parse({
-    id: row.id,
-    taskId: row.task_id,
-    eventType: row.event_type,
-    timestamp: row.timestamp,
-  });
+export async function __resetDbForTesting(): Promise<void> {
+  if (dbPromise) {
+    const db = await dbPromise;
+    db.close();
+    dbPromise = null;
+  }
 }
